@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer Kompetisi Menara Balon</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Google Fonts: Fredoka (Playful & Rounded) -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background: linear-gradient(135deg, #38bdf8 0%, #1d4ed8 100%);
+            overflow-x: hidden;
+            color: white;
+            user-select: none;
+        }
+
+        .app-shell {
+            min-height: 100vh;
+            min-height: 100svh;
+        }
+
+        .timer-screen {
+            position: relative;
+            min-height: 100vh;
+            min-height: 100svh;
+        }
+
+        .timer-heading {
+            top: max(1rem, env(safe-area-inset-top));
+        }
+
+        .timer-display {
+            font-size: clamp(4rem, min(30vw, 48vh), 25rem);
+        }
+
+        .timer-controls {
+            bottom: max(1rem, env(safe-area-inset-bottom));
+        }
+
+        @media (max-width: 480px) {
+            .timer-heading {
+                top: max(1rem, env(safe-area-inset-top));
+            }
+
+            .timer-controls {
+                gap: 0.75rem;
+                width: 100%;
+                padding-inline: 1rem;
+            }
+
+            .timer-controls button {
+                min-height: 3.5rem;
+                flex: 1;
+                justify-content: center;
+                padding-inline: 0.75rem;
+                font-size: 1rem;
+            }
+
+            #btn-pause {
+                width: auto;
+            }
+
+            #timer-screen > div:first-child h2 {
+                font-size: clamp(1.125rem, 5vw, 1.5rem);
+            }
+        }
+
+        /* Custom Animations */
+        @keyframes float {
+            0% { transform: translateY(100vh) scale(0.8) rotate(-5deg); opacity: 0; }
+            10% { opacity: 0.6; }
+            90% { opacity: 0.6; }
+            100% { transform: translateY(-20vh) scale(1.2) rotate(5deg); opacity: 0; }
+        }
+
+        @keyframes pulseRed {
+            0%, 100% { color: #f87171; transform: scale(1); text-shadow: 0 0 20px rgba(248, 113, 113, 0.5); }
+            50% { color: #ef4444; transform: scale(1.05); text-shadow: 0 0 50px rgba(239, 68, 68, 0.9); }
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0) rotate(0deg); }
+            20% { transform: translateX(-10px) rotate(-3deg); }
+            40% { transform: translateX(10px) rotate(3deg); }
+            60% { transform: translateX(-10px) rotate(-3deg); }
+            80% { transform: translateX(10px) rotate(3deg); }
+        }
+
+        .balloon {
+            position: absolute;
+            bottom: -100px;
+            width: 60px;
+            height: 75px;
+            background-color: #fbbf24; /* Yellow default */
+            border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+            box-shadow: inset -10px -10px 15px rgba(0,0,0,0.2);
+            animation: float 15s linear infinite;
+            z-index: 0;
+        }
+        .balloon::before {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 10px solid inherit; /* inherits color from JS */
+        }
+        .balloon::after {
+            content: '';
+            position: absolute;
+            bottom: -50px;
+            left: 50%;
+            width: 2px;
+            height: 50px;
+            background: rgba(255,255,255,0.4);
+        }
+
+        .danger-pulse {
+            animation: pulseRed 1s infinite;
+        }
+
+        .pop-animation {
+            animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .time-up-shake {
+            animation: shake 0.5s ease-in-out infinite;
+            color: #fef08a; /* Yellow */
+            text-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 50px rgba(239,68,68,0.8);
+        }
+
+        /* Number Display specific styling */
+        .digital-clock {
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body class="w-full flex flex-col items-center justify-center relative">
+
+    <!-- CSS Balloons Background -->
+    <div id="balloon-container" class="absolute inset-0 pointer-events-none overflow-hidden">
+        <!-- Balloons generated by JS -->
+    </div>
+
+    <!-- MAIN CONTAINER -->
+    <div class="app-shell relative z-10 w-full flex flex-col items-center justify-center p-3 sm:p-4">
+        
+        <!-- VIEW 1: SETUP SCREEN -->
+        <div id="setup-screen" class="bg-white/10 backdrop-blur-md border border-white/30 p-5 sm:p-10 rounded-3xl shadow-2xl flex flex-col items-center text-center max-w-lg w-full pop-animation">
+            <div class="flex items-center gap-3 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 sm:h-10 sm:w-10 text-yellow-300" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.381z" clip-rule="evenodd" />
+                </svg>
+                <h1 class="text-3xl md:text-4xl font-bold text-yellow-300 drop-shadow-md">Kompetisi</h1>
+            </div>
+            <h2 class="text-3xl sm:text-4xl md:text-5xl font-extrabold mb-6 sm:mb-8 text-white drop-shadow-lg tracking-wide uppercase">Menara Balon</h2>
+            
+            <p class="text-blue-100 mb-4 font-medium text-lg">Atur Waktu (Menit : Detik)</p>
+            
+            <div id="time-inputs" class="flex items-center gap-3 sm:gap-4 mb-7 sm:mb-10">
+                <!-- Minutes Input -->
+                <div class="flex flex-col items-center bg-blue-900/40 p-3 sm:p-4 rounded-2xl border border-blue-400/30">
+                    <button id="btn-min-up" class="text-white hover:text-yellow-300 transition-colors p-2 active:scale-95">
+                        <svg class="w-7 h-7 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"></path></svg>
+                    </button>
+                    <input type="number" id="input-minutes" value="10" min="0" max="99" class="w-16 sm:w-20 bg-transparent text-center text-4xl sm:text-5xl font-bold text-white focus:outline-none digital-clock placeholder-blue-300">
+                    <button id="btn-min-down" class="text-white hover:text-yellow-300 transition-colors p-2 active:scale-95">
+                        <svg class="w-7 h-7 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                </div>
+                
+                <span class="text-5xl font-bold text-blue-200 pb-2">:</span>
+                
+                <!-- Seconds Input -->
+                <div class="flex flex-col items-center bg-blue-900/40 p-3 sm:p-4 rounded-2xl border border-blue-400/30">
+                    <button id="btn-sec-up" class="text-white hover:text-yellow-300 transition-colors p-2 active:scale-95">
+                        <svg class="w-7 h-7 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 15l7-7 7 7"></path></svg>
+                    </button>
+                    <input type="number" id="input-seconds" value="00" min="0" max="59" class="w-16 sm:w-20 bg-transparent text-center text-4xl sm:text-5xl font-bold text-white focus:outline-none digital-clock placeholder-blue-300">
+                    <button id="btn-sec-down" class="text-white hover:text-yellow-300 transition-colors p-2 active:scale-95">
+                        <svg class="w-7 h-7 sm:w-8 sm:h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                </div>
+            </div>
+            
+            <button id="btn-start" class="w-full py-3 sm:py-4 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-blue-900 font-extrabold text-xl sm:text-2xl shadow-[0_10px_25px_rgba(250,204,21,0.5)] transition-all hover:scale-105 active:scale-95 tracking-wider uppercase border-2 border-yellow-200">
+                Mulai Kompetisi!
+            </button>
+        </div>
+
+        <!-- VIEW 2: TIMER SCREEN -->
+        <div id="timer-screen" class="timer-screen hidden flex-col items-center justify-center w-full">
+            
+            <div class="timer-heading absolute text-center w-full px-4">
+                <h2 class="text-2xl md:text-4xl font-bold text-yellow-300 drop-shadow-md tracking-wider uppercase">Pembuatan Menara Balon</h2>
+            </div>
+
+            <div class="flex-grow flex items-center justify-center w-full">
+                <!-- Huge Timer Display -->
+                <div id="time-display" class="timer-display font-black leading-none digital-clock transition-colors duration-300 tracking-tighter">
+                    10:00
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div id="timer-controls" class="timer-controls absolute flex gap-6 z-20">
+                <button id="btn-reset" class="px-8 py-4 rounded-full bg-red-500 hover:bg-red-400 text-white font-bold text-xl shadow-lg transition-transform hover:scale-105 active:scale-95 border-2 border-red-300 flex items-center gap-2">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Reset
+                </button>
+                <button id="btn-pause" class="px-12 py-4 rounded-full bg-yellow-400 hover:bg-yellow-300 text-blue-900 font-extrabold text-2xl shadow-[0_5px_20px_rgba(250,204,21,0.4)] transition-transform hover:scale-105 active:scale-95 border-2 border-yellow-200 flex items-center gap-2 w-48 justify-center">
+                    <svg id="icon-pause" class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span id="text-pause">Pause</span>
+                </button>
+            </div>
+            
+            <!-- Time's Up Text -->
+            <div id="times-up-msg" class="hidden absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm z-30 flex-col">
+                <h1 class="text-5xl sm:text-7xl md:text-[8rem] lg:text-[10rem] font-black uppercase text-center time-up-shake leading-tight">Waktu<br>Habis!</h1>
+                <button id="btn-back" class="mt-8 sm:mt-12 px-6 sm:px-10 py-3 sm:py-4 rounded-full bg-white text-blue-900 font-bold text-lg sm:text-2xl shadow-xl transition-transform hover:scale-105 active:scale-95 border-4 border-blue-200 pop-animation">
+                    Kembali ke Pengaturan
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Visual Background: Generate Balloons ---
+        const colors = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#a855f7', '#ec4899'];
+        const balloonContainer = document.getElementById('balloon-container');
+        
+        function createBalloon() {
+            const balloon = document.createElement('div');
+            balloon.classList.add('balloon');
+            
+            // Random properties
+            const left = Math.random() * 100; // 0 to 100vw
+            const animDuration = 10 + Math.random() * 15; // 10s to 25s
+            const delay = Math.random() * 5;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const scale = 0.5 + Math.random() * 0.8;
+            
+            balloon.style.left = `${left}vw`;
+            balloon.style.animationDuration = `${animDuration}s`;
+            balloon.style.animationDelay = `${delay}s`;
+            balloon.style.backgroundColor = color;
+            balloon.style.borderBottomColor = color; // For the tie knot
+            balloon.style.transform = `scale(${scale})`;
+            
+            balloonContainer.appendChild(balloon);
+            
+            // Remove after animation completes
+            setTimeout(() => {
+                balloon.remove();
+            }, (animDuration + delay) * 1000);
+        }
+
+        // Initially create some balloons, then continuously spawn them
+        for(let i=0; i<15; i++) setTimeout(createBalloon, Math.random() * 5000);
+        setInterval(createBalloon, 2000);
+
+        // --- Logic Timer ---
+        let totalSeconds = 600; // 10 mins default
+        let timerInterval = null;
+        let isRunning = false;
+        
+        // Audio Synthesizers (Tone.js)
+        let beepSynth, buzzerSynth;
+
+        function setupAudio() {
+            // High pitch short beep for countdown
+            beepSynth = new Tone.Synth({
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 }
+            }).toDestination();
+            beepSynth.volume.value = -10;
+
+            // Loud loud long buzzer for end
+            buzzerSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.1, decay: 0.2, sustain: 1, release: 1 }
+            }).toDestination();
+            buzzerSynth.volume.value = -5;
+        }
+
+        // Elements
+        const setupScreen = document.getElementById('setup-screen');
+        const timerScreen = document.getElementById('timer-screen');
+        const timeDisplay = document.getElementById('time-display');
+        const timesUpMsg = document.getElementById('times-up-msg');
+        const timerControls = document.getElementById('timer-controls');
+        
+        const inputMinutes = document.getElementById('input-minutes');
+        const inputSeconds = document.getElementById('input-seconds');
+        
+        const btnStart = document.getElementById('btn-start');
+        const btnPause = document.getElementById('btn-pause');
+        const btnReset = document.getElementById('btn-reset');
+        const btnBack = document.getElementById('btn-back');
+        
+        const iconPause = document.getElementById('icon-pause');
+        const textPause = document.getElementById('text-pause');
+
+        // Input Handlers (Up/Down buttons & Validation)
+        function formatInput(val) {
+            return val.toString().padStart(2, '0');
+        }
+
+        document.getElementById('btn-min-up').onclick = () => { inputMinutes.value = formatInput(Math.min(99, parseInt(inputMinutes.value || 0) + 1)); };
+        document.getElementById('btn-min-down').onclick = () => { inputMinutes.value = formatInput(Math.max(0, parseInt(inputMinutes.value || 0) - 1)); };
+        document.getElementById('btn-sec-up').onclick = () => { 
+            let s = parseInt(inputSeconds.value || 0) + 1;
+            if(s > 59) { s = 0; inputMinutes.value = formatInput(Math.min(99, parseInt(inputMinutes.value || 0) + 1)); }
+            inputSeconds.value = formatInput(s); 
+        };
+        document.getElementById('btn-sec-down').onclick = () => { 
+            let s = parseInt(inputSeconds.value || 0) - 1;
+            if(s < 0) { s = 59; inputMinutes.value = formatInput(Math.max(0, parseInt(inputMinutes.value || 0) - 1)); }
+            inputSeconds.value = formatInput(s); 
+        };
+
+        // Format to MM:SS
+        function updateDisplayTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            timeDisplay.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            
+            // Visual Effect for Last 10 Seconds
+            if (seconds <= 10 && seconds > 0) {
+                timeDisplay.classList.add('danger-pulse');
+                // Play beep
+                if(beepSynth && isRunning) beepSynth.triggerAttackRelease("C6", "0.1s");
+            } else {
+                timeDisplay.classList.remove('danger-pulse');
+            }
+        }
+
+        // Start button action (Perbaikan: Menghilangkan async/await agar tidak memblokir UI)
+        btnStart.addEventListener('click', () => {
+            // Init Tone.js audio context di latar belakang tanpa memblokir jalannya timer
+            Tone.start().then(() => {
+                if(!beepSynth) setupAudio();
+            }).catch(err => {
+                console.warn("Audio context bypass:", err);
+            });
+
+            let m = parseInt(inputMinutes.value) || 0;
+            let s = parseInt(inputSeconds.value) || 0;
+            totalSeconds = (m * 60) + s;
+            
+            if (totalSeconds <= 0) {
+                // Efek visual peringatan jika klik Mulai tapi waktu masih 0
+                const inputContainer = document.getElementById('time-inputs');
+                if (inputContainer) {
+                    inputContainer.classList.add('time-up-shake');
+                    setTimeout(() => inputContainer.classList.remove('time-up-shake'), 500);
+                }
+                return; 
+            }
+
+            setupScreen.classList.add('hidden');
+            timerScreen.classList.remove('hidden');
+            timerScreen.classList.add('flex');
+            timesUpMsg.classList.add('hidden');
+            timerControls.classList.remove('hidden');
+            
+            updateDisplayTime(totalSeconds);
+            startInterval();
+        });
+
+        function startInterval() {
+            isRunning = true;
+            updatePauseBtnUI();
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                totalSeconds--;
+                updateDisplayTime(totalSeconds);
+                
+                if (totalSeconds <= 0) {
+                    timeIsUp();
+                }
+            }, 1000);
+        }
+
+        function togglePause() {
+            if (isRunning) {
+                clearInterval(timerInterval);
+                isRunning = false;
+            } else {
+                startInterval();
+            }
+            updatePauseBtnUI();
+        }
+
+        function updatePauseBtnUI() {
+            if (isRunning) {
+                textPause.textContent = "Pause";
+                iconPause.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>`;
+                btnPause.classList.replace('bg-green-400', 'bg-yellow-400');
+                btnPause.classList.replace('hover:bg-green-300', 'hover:bg-yellow-300');
+                btnPause.classList.replace('border-green-300', 'border-yellow-200');
+                timeDisplay.classList.remove('opacity-60');
+            } else {
+                textPause.textContent = "Resume";
+                iconPause.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>`;
+                btnPause.classList.replace('bg-yellow-400', 'bg-green-400');
+                btnPause.classList.replace('hover:bg-yellow-300', 'hover:bg-green-300');
+                btnPause.classList.replace('border-yellow-200', 'border-green-300');
+                timeDisplay.classList.add('opacity-60');
+                timeDisplay.classList.remove('danger-pulse');
+            }
+        }
+
+        function timeIsUp() {
+            clearInterval(timerInterval);
+            isRunning = false;
+            timeDisplay.classList.remove('danger-pulse');
+            timerControls.classList.add('hidden');
+            timesUpMsg.classList.remove('hidden');
+            
+            // Play loud buzzer
+            try {
+                if(buzzerSynth) {
+                    // Play chord for buzzer sound
+                    buzzerSynth.triggerAttackRelease(["C3", "C4", "G3"], "2s");
+                }
+            } catch (error) {
+                console.warn("Buzzer play bypassed:", error);
+            }
+        }
+
+        function resetToSetup() {
+            clearInterval(timerInterval);
+            isRunning = false;
+            timeDisplay.classList.remove('danger-pulse');
+            
+            // Stop audio if playing (dibungkus try-catch agar tidak memicu error di Chrome/Brave)
+            try {
+                if(beepSynth) beepSynth.triggerRelease();
+                if(buzzerSynth) buzzerSynth.releaseAll();
+            } catch (error) {
+                console.warn("Audio stop bypassed:", error);
+            }
+
+            // Mengembalikan input timer ke angka 0
+            document.getElementById('input-minutes').value = "00";
+            document.getElementById('input-seconds').value = "00";
+
+            timerScreen.classList.add('hidden');
+            timerScreen.classList.remove('flex');
+            setupScreen.classList.remove('hidden');
+        }
+
+        // Control Buttons Actions
+        btnPause.addEventListener('click', togglePause);
+        btnReset.addEventListener('click', resetToSetup);
+        btnBack.addEventListener('click', resetToSetup);
+
+    </script>
+</body>
+</html>
